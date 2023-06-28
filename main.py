@@ -17,64 +17,77 @@ import numpy as np
 
 features = 'null'
 
-# load features from pickle
+# SA1: load features from features.pkl
 with open('features.pkl', 'rb') as f:
     features = pickle.load(f)
 
+# SA1: Load the captions from caption.txt
 with open('captions.txt', 'r') as f:
     next(f)
     captions_doc = f.read()
 
+
 model = keras.models.load_model('best_model.h5')
 
-# create mapping of image to captions
+# SA1: Create mapping of image to captions
 mapping = {}
-# process lines
+# SA1: Loop through every caption
 for line in tqdm(captions_doc.split('\n')):
-    # split the line by comma(,)
+    # SA1: Split the line by comma(,)
     tokens = line.split(',')
+    # SA1: Move to next iteration if length of line is less then 2 characters
     if len(line) < 2:
         continue
+    # SA1: Take image_id and caption from token[0], [1] respectively
     image_id, caption = tokens[0], tokens[1:]
-    # remove extension from image ID
+    # SA1: Remove extension from image ID
     image_id = image_id.split('.')[0]
-    # convert caption list to string
+    # SA1: Convert caption list to string
     caption = " ".join(caption)
-    # create list if needed
+    # Sa1: Create list if needed
     if image_id not in mapping:
         mapping[image_id] = []
-    # store the caption
+    # SA1: Store the caption
     mapping[image_id].append(caption)
 
-def clean(mapping):
-    for key, captions in mapping.items():
-        for i in range(len(captions)):
-            # take one caption at a time
-            caption = captions[i]
-            # preprocessing steps
-            # convert to lowercase
-            caption = caption.lower()
-            # delete digits, special chars, etc., 
-            caption = caption.replace('[^A-Za-z]', '')
-            # delete additional spaces
-            caption = caption.replace('\s+', ' ')
-            # add start and end tags to the caption
-            caption = 'startseq ' + " ".join([word for word in caption.split() if len(word)>1]) + ' endseq'
-            captions[i] = caption
+# SA1: Print the mapping dictionary
+print(mapping["1000268201_693b08cb0e"])
 
-# preprocess the text
-clean(mapping)
+# SA2: Loop throught each key and captions in the mapping
+for key, captions in mapping.items():
+    # SA2: Go throught each caption in captions for a given image
+    for i in range(len(captions)):
+        # SA2: Take one caption at a time
+        caption = captions[i]
+        # SA2: Convert to lowercase
+        caption = caption.lower()
+        # SA2: Delete digits, special chars, etc., 
+        caption = caption.replace('[^a-z]', '')
+        # SA2: Delete additional spaces
+        caption = caption.replace('\s+', ' ')
+        # SA2: Add start and end tags to the caption
+        caption = 'startseq ' + " ".join([word for word in caption.split() if len(word)>1]) + ' endseq'
+        # SA2: Store the cleaned caption back
+        captions[i] = caption
 
+# SA2: Print the cleaned mapping
+print("::::::::::::::::::::::::Mapping after cleaning::::::::::::::::::::::::")
+print(mapping["1000268201_693b08cb0e"])
+
+# SA3: Create an empty list for storing all_captions
 all_captions = []
+# SA3: Run a loop for each key in the mapping
 for key in mapping:
+    # SA3: Run loop for each caption in the mapping[key]
     for caption in mapping[key]:
+        # SA3: Append caption to all_captions
         all_captions.append(caption)
 
-# tokenize the text
+# SA3: Create a tokenizer
 tokenizer = Tokenizer()
+# SA3: Updates internal vocabulary of tokenizer based on a list of texts.
 tokenizer.fit_on_texts(all_captions)
 
-# get maximum length of the caption available
 max_length = max(len(caption.split()) for caption in all_captions)
 max_length
 
@@ -84,38 +97,25 @@ def idx_to_word(integer, tokenizer):
             return word
     return None
 
-# generate caption for an image
-def predict_caption(model, image, tokenizer, max_length):
-    # add start tag for generation process
+def predict_caption(model, image, tokenizer):
+    global max_length
     in_text = 'startseq'
-    # iterate over the max length of sequence
     for i in range(max_length):
-        # encode input sequence
         sequence = tokenizer.texts_to_sequences([in_text])[0]
-        # pad the sequence
         sequence = pad_sequences([sequence], max_length)
-        # predict next word
         yhat = model.predict([image, sequence], verbose=0)
-        # get index with high probability
         yhat = np.argmax(yhat)
-        # convert index to word
         word = idx_to_word(yhat, tokenizer)
-        # stop if word not found
         if word is None:
             break
-        # append word as input for generating next word
         in_text += " " + word
-        # stop if we reach end tag
         if word == 'endseq':
             break
       
     return in_text
 
-
-# TEst with real images
-
 vgg_model = VGG16()
-# restructure the model
+
 vgg_model = Model(inputs=vgg_model.inputs, outputs=vgg_model.layers[-2].output)
 
 cap = cv2.VideoCapture("video3.mp4")
@@ -127,22 +127,18 @@ while True:
         img = cv2.flip(img, 1)
 
         if i == 10:
-            # convert cv2 image to numpy array
-            #image = np.asarray(img)     
+            image = np.asarray(img)     
             image = img
             image = cv2.resize(image, (224, 224))
-            # reshape data for model
             image = image.reshape((1, image.shape[0], image.shape[1], image.shape[2]))
-            # preprocess image for vgg
             image = preprocess_input(image)
-            # extract features
             feature = vgg_model.predict(image, verbose=0)
-            # predict from the trained model
-            caption = predict_caption(model, feature, tokenizer, max_length)
+            
+            # SA3: Call the predict_caption function with model, feature, tokenizer and save the returned value in variable caption
+            caption = predict_caption(model, feature, tokenizer)
 
             i = 0
-        
-            
+                    
         img = cv2.putText(img, caption, (10,10), cv2.FONT_HERSHEY_DUPLEX, 0.3, (255, 255, 255), 2)
         print(caption)
         i = i+1      
